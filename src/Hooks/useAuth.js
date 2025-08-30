@@ -11,9 +11,13 @@ export function useAuth() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+    }, (error) => {
+      console.error("Auth state change error:", error);
+      setLoading(false);
     });
+    
     return unsubscribe;
   }, []);
 
-  return { user, loading };
+  return user; // Return just the user object
 }
