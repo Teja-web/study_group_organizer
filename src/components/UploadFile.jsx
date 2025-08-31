@@ -1,34 +1,67 @@
-import { useState, useEffect } from "react";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { collection, addDoc, serverTimestamp, onSnapshot, deleteDoc, doc } from "firebase/firestore";
-import { storage, db, auth } from "../firebase";
+import React, { useState, useEffect } from "react";
 
-export default function UploadFile({ groupId }) {
+const UploadFile = ({ groupId }) => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [resources, setResources] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [resources, setResources] = useState([]);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    if (!groupId) return;
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
-    // Listen to resources in real-time
-    const resourcesQuery = collection(db, "groups", groupId, "resources");
-    const unsubscribe = onSnapshot(resourcesQuery, (snapshot) => {
-      const resourcesData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setResources(resourcesData);
-    });
+  // Mock resources data
+  useEffect(() => {
+    const mockResources = [
+      {
+        id: "1",
+        name: "Calculus_Chapter_1_Notes.pdf",
+        originalName: "Calculus_Chapter_1_Notes.pdf",
+        url: "#",
+        size: 2048576, // 2MB
+        type: "application/pdf",
+        uploadedAt: new Date(Date.now() - 86400000), // 1 day ago
+        uploadedBy: "professor",
+        uploadedByName: "Professor Smith"
+      },
+      {
+        id: "2",
+        name: "Integration_Practice_Problems.docx",
+        originalName: "Integration_Practice_Problems.docx",
+        url: "#",
+        size: 1048576, // 1MB
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        uploadedAt: new Date(Date.now() - 43200000), // 12 hours ago
+        uploadedBy: "john",
+        uploadedByName: "John Doe"
+      },
+      {
+        id: "3",
+        name: "Study_Schedule_2024.xlsx",
+        originalName: "Study_Schedule_2024.xlsx",
+        url: "#",
+        size: 512000, // 512KB
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        uploadedAt: new Date(Date.now() - 21600000), // 6 hours ago
+        uploadedBy: "jane",
+        uploadedByName: "Jane Smith"
+      }
+    ];
 
-    return () => unsubscribe();
+    setTimeout(() => {
+      setResources(mockResources);
+    }, 1000);
   }, [groupId]);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      // Check file size (max 10MB)
+      // Check file size (10MB limit)
       if (selectedFile.size > 10 * 1024 * 1024) {
         alert("File size must be less than 10MB");
         return;
@@ -38,71 +71,72 @@ export default function UploadFile({ groupId }) {
   };
 
   const handleUpload = async () => {
-    if (!file || !auth.currentUser) return;
+    if (!file || !user) return;
+
+    setLoading(true);
+    setUploadProgress(0);
 
     try {
-      setLoading(true);
-      setUploadProgress(0);
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
-      // Create a unique filename
-      const timestamp = Date.now();
-      const fileName = `${timestamp}_${file.name}`;
-      const fileRef = ref(storage, `groups/${groupId}/resources/${fileName}`);
+      // Simulate upload delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Upload file
-      await uploadBytes(fileRef, file);
-      setUploadProgress(50);
+      clearInterval(progressInterval);
+      setUploadProgress(100);
 
-      // Get download URL
-      const url = await getDownloadURL(fileRef);
-      setUploadProgress(75);
-
-      // Save file details in Firestore
-      await addDoc(collection(db, "groups", groupId, "resources"), {
+      // Create mock resource data
+      const resourceData = {
+        id: Date.now().toString(),
         name: file.name,
         originalName: file.name,
-        url: url,
+        url: URL.createObjectURL(file), // Create a blob URL for preview
         size: file.size,
         type: file.type,
-        uploadedAt: serverTimestamp(),
-        uploadedBy: auth.currentUser.uid,
-        uploadedByName: auth.currentUser.displayName || auth.currentUser.email,
-      });
+        uploadedAt: new Date(),
+        uploadedBy: user.uid,
+        uploadedByName: user.displayName || user.email
+      };
 
-      setUploadProgress(100);
+      // Add to resources list
+      setResources(prev => [resourceData, ...prev]);
       setFile(null);
       
       // Reset file input
       const fileInput = document.getElementById('file-input');
       if (fileInput) fileInput.value = '';
-      
-    } catch (err) {
-      console.error("Upload failed:", err);
-      alert("Upload failed: " + err.message);
+
+      // Reset progress after a delay
+      setTimeout(() => setUploadProgress(0), 1000);
+
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Upload failed: " + error.message);
     } finally {
       setLoading(false);
-      setUploadProgress(0);
     }
   };
 
-  const handleDelete = async (resource) => {
-    if (!auth.currentUser || resource.uploadedBy !== auth.currentUser.uid) {
-      alert("You can only delete your own files");
-      return;
-    }
+  const handleDelete = async (resourceId) => {
+    if (!user) return;
 
-    if (!confirm("Are you sure you want to delete this file?")) return;
-
-    try {
-      // Delete from Storage
-      const fileRef = ref(storage, resource.url);
-      await deleteObject(fileRef);
-
-      // Delete from Firestore
-      await deleteDoc(doc(db, "groups", groupId, "resources", resource.id));
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete file: " + err.message);
+    if (window.confirm("Are you sure you want to delete this file?")) {
+      try {
+        // Remove from local state
+        setResources(prev => prev.filter(resource => resource.id !== resourceId));
+      } catch (error) {
+        console.error("Delete failed:", error);
+        alert("Failed to delete file");
+      }
     }
   };
 
@@ -114,62 +148,77 @@ export default function UploadFile({ groupId }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getFileIcon = (fileType) => {
-    if (fileType.includes('image')) return '🖼️';
-    if (fileType.includes('pdf')) return '📄';
-    if (fileType.includes('word') || fileType.includes('document')) return '📝';
-    if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊';
-    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📈';
-    if (fileType.includes('video')) return '🎥';
-    if (fileType.includes('audio')) return '🎵';
+  const getFileIcon = (type) => {
+    if (type.includes('pdf')) return '📄';
+    if (type.includes('word') || type.includes('document')) return '📝';
+    if (type.includes('excel') || type.includes('spreadsheet')) return '📊';
+    if (type.includes('image')) return '🖼️';
+    if (type.includes('video')) return '🎥';
+    if (type.includes('audio')) return '🎵';
     return '📁';
+  };
+
+  const canDelete = (resource) => {
+    return resource.uploadedBy === user?.uid;
   };
 
   return (
     <div className="space-y-6">
       {/* Upload Section */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">📤 Upload File</h3>
+        <h4 className="font-medium text-gray-700 mb-4">📤 Upload New File</h4>
         
         <div className="space-y-4">
+          {/* File Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select File
-            </label>
             <input
-              id="file-input"
               type="file"
+              id="file-input"
               onChange={handleFileSelect}
-              className="input"
-              accept="*/*"
-              disabled={loading}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Maximum file size: 10MB
+              Maximum file size: 10MB. Supported formats: PDF, DOC, XLS, PPT, TXT, Images
             </p>
           </div>
 
+          {/* Selected File Preview */}
           {file && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{getFileIcon(file.type)}</span>
                 <div className="flex-1">
-                  <div className="font-medium text-blue-800">{file.name}</div>
-                  <div className="text-sm text-blue-600">{formatFileSize(file.size)}</div>
+                  <div className="font-medium text-gray-800">{file.name}</div>
+                  <div className="text-sm text-gray-500">{formatFileSize(file.size)}</div>
                 </div>
+                <button
+                  onClick={() => setFile(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
               </div>
             </div>
           )}
 
+          {/* Upload Progress */}
           {uploadProgress > 0 && (
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Uploading...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
             </div>
           )}
 
+          {/* Upload Button */}
           <button
             onClick={handleUpload}
             disabled={!file || loading}
@@ -189,29 +238,24 @@ export default function UploadFile({ groupId }) {
 
       {/* Files List */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          📁 Shared Files ({resources.length})
-        </h3>
+        <h4 className="font-medium text-gray-700 mb-4">📁 Shared Files ({resources.length})</h4>
         
         {resources.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-4xl mb-4">📁</div>
             <p className="text-gray-500">No files shared yet</p>
-            <p className="text-sm text-gray-400">Upload the first file to get started!</p>
+            <p className="text-sm text-gray-400">Be the first to share a resource!</p>
           </div>
         ) : (
           <div className="space-y-3">
             {resources.map((resource) => (
-              <div
-                key={resource.id}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              >
+              <div key={resource.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{getFileIcon(resource.type)}</span>
                   <div>
                     <div className="font-medium text-gray-800">{resource.name}</div>
                     <div className="text-sm text-gray-500">
-                      {formatFileSize(resource.size)} • Uploaded by {resource.uploadedByName} • {resource.uploadedAt?.toDate?.()?.toLocaleDateString()}
+                      {formatFileSize(resource.size)} • Uploaded by {resource.uploadedByName} • {resource.uploadedAt.toLocaleDateString()}
                     </div>
                   </div>
                 </div>
@@ -225,9 +269,9 @@ export default function UploadFile({ groupId }) {
                   >
                     Download
                   </a>
-                  {auth.currentUser && resource.uploadedBy === auth.currentUser.uid && (
+                  {canDelete(resource) && (
                     <button
-                      onClick={() => handleDelete(resource)}
+                      onClick={() => handleDelete(resource.id)}
                       className="btn btn-danger btn-sm"
                     >
                       Delete
@@ -241,4 +285,6 @@ export default function UploadFile({ groupId }) {
       </div>
     </div>
   );
-}
+};
+
+export default UploadFile;

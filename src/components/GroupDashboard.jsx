@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import Chat from './Chat';
+import UploadFile from './UploadFile';
+import MemberList from './MemberList';
 
 const GroupDashboard = () => {
   const { groupId } = useParams();
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   // Mock data for testing
   useEffect(() => {
@@ -19,7 +31,7 @@ const GroupDashboard = () => {
       tags: ["calculus", "advanced", "problem-solving", "exam-prep"],
       createdBy: "professor@university.edu",
       createdAt: new Date(Date.now() - 86400000),
-      members: ["user1", "user2", "user3", "currentUser"]
+      members: ["user1", "user2", "user3", "mock-user-id"] // Include the mock user ID
     };
 
     setTimeout(() => {
@@ -29,7 +41,7 @@ const GroupDashboard = () => {
   }, [groupId]);
 
   const isMember = () => {
-    return group?.members?.includes("currentUser") || false;
+    return user && group?.members?.includes(user.uid) || false;
   };
 
   const getMemberCount = () => {
@@ -240,34 +252,20 @@ const GroupDashboard = () => {
 
         {activeTab === 'chat' && (
           <div className="card">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">💬 Group Chat</h3>
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">💬</div>
-              <p className="text-gray-600 mb-4">Chat functionality will be available soon!</p>
-              <p className="text-sm text-gray-500">Real-time messaging is coming in the next update.</p>
-            </div>
+            <Chat groupId={groupId} />
           </div>
         )}
 
         {activeTab === 'resources' && (
           <div className="card">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">📁 Shared Resources</h3>
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">📁</div>
-              <p className="text-gray-600 mb-4">File sharing functionality will be available soon!</p>
-              <p className="text-sm text-gray-500">Upload and download features are coming in the next update.</p>
-            </div>
+            <UploadFile groupId={groupId} />
           </div>
         )}
 
         {activeTab === 'members' && (
           <div className="card">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">👥 Group Members</h3>
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">👥</div>
-              <p className="text-gray-600 mb-4">Member management will be available soon!</p>
-              <p className="text-sm text-gray-500">View and manage group members in the next update.</p>
-            </div>
+            <MemberList groupId={groupId} />
           </div>
         )}
       </div>

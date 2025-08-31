@@ -1,5 +1,5 @@
 // src/components/CreateGroup.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const CreateGroup = ({ isOpen, onClose, onGroupCreated }) => {
   const [formData, setFormData] = useState({
@@ -12,6 +12,15 @@ const CreateGroup = ({ isOpen, onClose, onGroupCreated }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   const subjects = [
     "Mathematics",
@@ -62,10 +71,10 @@ const CreateGroup = ({ isOpen, onClose, onGroupCreated }) => {
         maxMembers: formData.maxMembers ? parseInt(formData.maxMembers) : null,
         schedule: formData.schedule.trim(),
         tags: tagsArray,
-        createdBy: "user@example.com",
-        createdByUid: "user",
+        createdBy: user?.email || "user@example.com",
+        createdByUid: user?.uid || "user",
         createdAt: new Date(),
-        members: ["user"]
+        members: [user?.uid || "user"]
       };
 
       // Simulate API call

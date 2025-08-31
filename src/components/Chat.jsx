@@ -1,60 +1,85 @@
-import { useState, useEffect, useRef } from "react";
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import React, { useState, useEffect, useRef } from "react";
 
-export default function Chat({ groupId }) {
+const Chat = ({ groupId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [user, setUser] = useState(null);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  // Mock messages data
+  useEffect(() => {
+    const mockMessages = [
+      {
+        id: "1",
+        text: "Hello everyone! Welcome to the Advanced Calculus Study Group!",
+        senderName: "Professor Smith",
+        senderUid: "professor",
+        createdAt: new Date(Date.now() - 86400000), // 1 day ago
+      },
+      {
+        id: "2",
+        text: "Hi! I'm excited to join this group. I've been struggling with integration techniques.",
+        senderName: "John Doe",
+        senderUid: "john",
+        createdAt: new Date(Date.now() - 82800000), // 23 hours ago
+      },
+      {
+        id: "3",
+        text: "Same here! The chain rule is giving me trouble. Anyone up for a study session tomorrow?",
+        senderName: "Jane Smith",
+        senderUid: "jane",
+        createdAt: new Date(Date.now() - 7200000), // 2 hours ago
+      },
+      {
+        id: "4",
+        text: "I found some great practice problems online. Should I share them?",
+        senderName: "Mike Johnson",
+        senderUid: "mike",
+        createdAt: new Date(Date.now() - 3600000), // 1 hour ago
+      }
+    ];
+
+    setTimeout(() => {
+      setMessages(mockMessages);
+      setLoading(false);
+    }, 1000);
+  }, [groupId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Fetch messages in real-time
-  useEffect(() => {
-    if (!groupId) return;
-
-    const q = query(
-      collection(db, "groups", groupId, "messages"),
-      orderBy("createdAt", "asc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messagesData = snapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      setMessages(messagesData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching messages:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [groupId]);
-
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Send new message
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !auth.currentUser) return;
+    if (!newMessage.trim() || !user) return;
 
     setSending(true);
+    
     try {
-      await addDoc(collection(db, "groups", groupId, "messages"), {
+      const messageData = {
+        id: Date.now().toString(),
         text: newMessage.trim(),
-        senderId: auth.currentUser.uid,
-        senderName: auth.currentUser.displayName || auth.currentUser.email,
-        createdAt: serverTimestamp(),
-      });
+        senderName: user.displayName || user.email,
+        senderUid: user.uid,
+        createdAt: new Date()
+      };
 
+      // Add message to local state
+      setMessages(prev => [...prev, messageData]);
       setNewMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
@@ -64,30 +89,28 @@ export default function Chat({ groupId }) {
     }
   };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return "";
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "";
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const formatDate = (date) => {
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return "Today";
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return "Yesterday";
+    const messageDate = new Date(date);
+    
+    if (messageDate.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (messageDate.toDateString() === new Date(today.getTime() - 86400000).toDateString()) {
+      return 'Yesterday';
     } else {
-      return date.toLocaleDateString();
+      return messageDate.toLocaleDateString();
     }
   };
 
   const isOwnMessage = (message) => {
-    return message.senderId === auth.currentUser?.uid;
+    return message.senderUid === user?.uid;
   };
 
   if (loading) {
@@ -119,8 +142,7 @@ export default function Chat({ groupId }) {
           </div>
         ) : (
           messages.map((msg, index) => {
-            const showDate = index === 0 || 
-              formatDate(msg.createdAt) !== formatDate(messages[index - 1]?.createdAt);
+            const showDate = index === 0 || formatDate(msg.createdAt) !== formatDate(messages[index - 1]?.createdAt);
             
             return (
               <div key={msg.id}>
@@ -132,16 +154,12 @@ export default function Chat({ groupId }) {
                   </div>
                 )}
                 
-                <div
-                  className={`flex ${isOwnMessage(msg) ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      isOwnMessage(msg)
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
+                <div className={`flex ${isOwnMessage(msg) ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    isOwnMessage(msg) 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
                     {!isOwnMessage(msg) && (
                       <div className="text-xs font-medium mb-1 opacity-75">
                         {msg.senderName || 'Unknown'}
@@ -163,14 +181,14 @@ export default function Chat({ groupId }) {
       </div>
 
       {/* Message Input */}
-      <div className="border-t border-gray-200 p-4">
-        <form onSubmit={handleSend} className="flex gap-2">
+      <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
+        <div className="flex gap-2">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="input flex-1"
+            placeholder="Type your message..."
+            className="flex-1 input"
             disabled={sending}
           />
           <button
@@ -187,8 +205,10 @@ export default function Chat({ groupId }) {
               'Send'
             )}
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
-}
+};
+
+export default Chat;

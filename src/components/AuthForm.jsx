@@ -46,11 +46,20 @@ const AuthForm = () => {
       return;
     }
 
-    // For now, just simulate success and navigate
-    setTimeout(() => {
-      setLoading(false);
-      navigate("/dashboard");
-    }, 1000);
+          // Simulate authentication success
+      setTimeout(() => {
+        setLoading(false);
+        // Store user info in localStorage for persistence
+        const userData = {
+          uid: "mock-user-id",
+          email: formData.email,
+          displayName: formData.email.split('@')[0]
+        };
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Use window.location.href for immediate navigation
+        window.location.href = '/dashboard';
+      }, 1000);
   };
 
   const toggleMode = () => {
@@ -157,6 +166,23 @@ const AuthForm = () => {
               ) : (
                 isRegister ? "Create Account" : "Sign In"
               )}
+            </button>
+
+            {/* Debug Button - Remove this in production */}
+            <button
+              type="button"
+              onClick={() => {
+                const userData = {
+                  uid: "mock-user-id",
+                  email: "test@example.com",
+                  displayName: "Test User"
+                };
+                localStorage.setItem('user', JSON.stringify(userData));
+                window.location.href = '/dashboard';
+              }}
+              className="btn btn-secondary w-full mt-2"
+            >
+              🚀 Quick Test Login
             </button>
           </form>
 

@@ -1,14 +1,24 @@
 // src/components/Dashboard.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import CreateGroup from "./CreateGroup";
 
 const Dashboard = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [userGroups, setUserGroups] = useState([]);
-  console.log("userGroups");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
   const handleLogout = () => {
-    // For now, just redirect to home
+    // Clear localStorage and redirect to home
+    localStorage.removeItem('user');
     window.location.href = '/';
   };
 
@@ -30,6 +40,15 @@ const Dashboard = () => {
     return colors[subject] || 'bg-gray-500';
   };
 
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loading"></div>
+        <span className="ml-2 text-gray-600">Loading...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -38,7 +57,7 @@ const Dashboard = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-gray-800">Study Group Organizer</h1>
-              <span className="text-sm text-gray-500">Welcome back, user@example.com</span>
+              <span className="text-sm text-gray-500">Welcome back, {user.email}</span>
             </div>
             <button
               onClick={handleLogout}
@@ -162,7 +181,7 @@ const Dashboard = () => {
           
           <div className="card text-center p-4">
             <div className="text-2xl font-bold text-green-600 mb-1">
-              {userGroups.filter(g => g.createdByUid === 'user').length}
+              {userGroups.filter(g => g.createdByUid === user.uid).length}
             </div>
             <div className="text-sm text-gray-600">Groups Created</div>
           </div>

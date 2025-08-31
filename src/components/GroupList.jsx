@@ -8,6 +8,15 @@ const GroupList = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   const subjects = [
     "All Subjects",
@@ -104,13 +113,18 @@ const GroupList = () => {
   }, [groups, searchTerm, selectedSubject, sortBy]);
 
   const handleJoin = (groupId) => {
+    if (!user) {
+      alert('Please login to join groups');
+      return;
+    }
+
     // Update local state to reflect the join
     setGroups(prevGroups =>
       prevGroups.map(group =>
         group.id === groupId
           ? {
               ...group,
-              members: [...(group.members || []), "currentUser"]
+              members: [...(group.members || []), user.uid]
             }
           : group
       )
@@ -118,13 +132,15 @@ const GroupList = () => {
   };
 
   const handleLeave = (groupId) => {
+    if (!user) return;
+
     // Update local state to reflect leaving
     setGroups(prevGroups =>
       prevGroups.map(group =>
         group.id === groupId
           ? {
               ...group,
-              members: group.members?.filter(id => id !== "currentUser") || []
+              members: group.members?.filter(id => id !== user.uid) || []
             }
           : group
       )
@@ -132,7 +148,7 @@ const GroupList = () => {
   };
 
   const isMember = (group) => {
-    return group.members?.includes("currentUser") || false;
+    return user && group.members?.includes(user.uid) || false;
   };
 
   if (loading) {
