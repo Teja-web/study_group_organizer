@@ -1,54 +1,170 @@
 pipeline {
-  agent none
-  options { timestamps(); timeout(time: 15, unit: 'MINUTES') }
+  agent any
+  options { 
+    timestamps()
+    timeout(time: 15, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+
+  environment {
+    NODE_VERSION = '18'
+  }
 
   stages {
-    /* 1) Run basic info on the Jenkins Controller (built-in node) */
-    stage('Where am I (Controller)') {
-      agent { label 'built-in' }
+    /* 1) Checkout and Environment Setup */
+    stage('Checkout & Setup') {
       steps {
+        echo "=========================================="
+        echo "🚀 STARTING BUILD FOR STUDY GROUP ORGANIZER"
+        echo "=========================================="
         echo "NODE = ${env.NODE_NAME}"
         echo "WORKSPACE = ${env.WORKSPACE}"
-      }
-    }
-
-    /* 2) Install dependencies and Build React app on Windows Agent */
-    stage('Build React App on Windows Agent') {
-      agent { label 'win' }
-      steps {
-        bat """
-        echo Installing dependencies...
-        npm install
-        echo Building React App...
-        npm run build
-        """
-      }
-    }
-
-    /* 3) Run React tests on Windows Agent */
-    stage('Run Tests on Windows Agent') {
-      agent { label 'win' }
-      steps {
-        bat """
-        echo Running Tests...
-        npm test -- --watchAll=false
-        """
-      }
-    }
-
-    /* 4) Parallel demo on Controller and Windows Agent */
-    stage('Parallel: Controller vs Agent') {
-      parallel {
-        stage('Controller lane') {
-          agent { label 'built-in' }
-          steps {
-            echo "PARALLEL NODE = ${env.NODE_NAME}"
+        echo "BUILD_NUMBER = ${env.BUILD_NUMBER}"
+        echo "BRANCH = ${env.BRANCH_NAME}"
+        echo "=========================================="
+        
+        script {
+          if (isUnix()) {
+            sh '''
+              echo "🔍 Checking Node.js version..."
+              node --version
+              echo "🔍 Checking npm version..."
+              npm --version
+            '''
+          } else {
+            bat '''
+              echo 🔍 Checking Node.js version...
+              node --version
+              echo 🔍 Checking npm version...
+              npm --version
+            '''
           }
         }
-        stage('Agent lane') {
-          agent { label 'win' }
-          steps {
-            bat "echo PARALLEL NODE = %NODE_NAME%"
+      }
+    }
+
+    /* 2) Install Dependencies */
+    stage('Install Dependencies') {
+      steps {
+        echo "=========================================="
+        echo "📦 INSTALLING DEPENDENCIES"
+        echo "=========================================="
+        
+        script {
+          if (isUnix()) {
+            sh '''
+              echo "🧹 Cleaning previous installations..."
+              rm -rf node_modules package-lock.json
+              echo "📥 Installing dependencies..."
+              npm install
+              echo "✅ Dependencies installed successfully!"
+            '''
+          } else {
+            bat '''
+              echo 🧹 Cleaning previous installations...
+              if exist node_modules rmdir /s /q node_modules
+              if exist package-lock.json del package-lock.json
+              echo 📥 Installing dependencies...
+              npm install
+              echo ✅ Dependencies installed successfully!
+            '''
+          }
+        }
+      }
+    }
+
+    /* 3) Lint Code */
+    stage('Code Linting') {
+      steps {
+        echo "=========================================="
+        echo "🔍 RUNNING CODE LINTING"
+        echo "=========================================="
+        
+        script {
+          if (isUnix()) {
+            sh '''
+              echo "🔍 Running ESLint..."
+              npm run lint
+              echo "✅ Code linting completed!"
+            '''
+          } else {
+            bat '''
+              echo 🔍 Running ESLint...
+              npm run lint
+              echo ✅ Code linting completed!
+            '''
+          }
+        }
+      }
+    }
+
+    /* 4) Build React App */
+    stage('Build React App') {
+      steps {
+        echo "=========================================="
+        echo "🏗️  BUILDING REACT APPLICATION"
+        echo "=========================================="
+        
+        script {
+          if (isUnix()) {
+            sh '''
+              echo "🧹 Cleaning previous build..."
+              rm -rf dist
+              echo "🏗️  Building React App with Vite..."
+              npm run build
+              echo "✅ Build completed successfully!"
+              echo "📁 Build artifacts:"
+              ls -la dist/
+            '''
+          } else {
+            bat '''
+              echo 🧹 Cleaning previous build...
+              if exist dist rmdir /s /q dist
+              echo 🏗️  Building React App with Vite...
+              npm run build
+              echo ✅ Build completed successfully!
+              echo 📁 Build artifacts:
+              dir dist
+            '''
+          }
+        }
+      }
+    }
+
+    /* 5) Verify Build */
+    stage('Verify Build') {
+      steps {
+        echo "=========================================="
+        echo "🔍 VERIFYING BUILD OUTPUT"
+        echo "=========================================="
+        
+        script {
+          if (isUnix()) {
+            sh '''
+              if [ -d "dist" ]; then
+                echo "✅ Build directory exists!"
+                echo "📊 Build size:"
+                du -sh dist/
+                echo "📄 Build contents:"
+                find dist -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -10
+                echo "🎉 BUILD VERIFICATION SUCCESSFUL!"
+              else
+                echo "❌ Build directory not found!"
+                exit 1
+              fi
+            '''
+          } else {
+            bat '''
+              if exist dist (
+                echo ✅ Build directory exists!
+                echo 📊 Build contents:
+                dir dist /s
+                echo 🎉 BUILD VERIFICATION SUCCESSFUL!
+              ) else (
+                echo ❌ Build directory not found!
+                exit /b 1
+              )
+            '''
           }
         }
       }
@@ -56,9 +172,52 @@ pipeline {
   }
 
   post {
+    success {
+      echo "=========================================="
+      echo "🎉 BUILD COMPLETED SUCCESSFULLY!"
+      echo "=========================================="
+      echo "Build Number: ${env.BUILD_NUMBER}"
+      echo "Branch: ${env.BRANCH_NAME}"
+      echo "Node: ${env.NODE_NAME}"
+      echo "Duration: ${currentBuild.durationString}"
+      echo "=========================================="
+    }
+    
+    failure {
+      echo "=========================================="
+      echo "❌ BUILD FAILED!"
+      echo "=========================================="
+      echo "Build Number: ${env.BUILD_NUMBER}"
+      echo "Branch: ${env.BRANCH_NAME}"
+      echo "Node: ${env.NODE_NAME}"
+      echo "Duration: ${currentBuild.durationString}"
+      echo "Check the logs above for error details."
+      echo "=========================================="
+    }
+    
     always {
-      node('win') {
-        archiveArtifacts artifacts: 'build/**, **/test-results/**/*.xml', allowEmptyArchive: true
+      echo "=========================================="
+      echo "📋 BUILD SUMMARY"
+      echo "=========================================="
+      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
+      echo "Build Number: ${env.BUILD_NUMBER}"
+      echo "Duration: ${currentBuild.durationString}"
+      echo "=========================================="
+      
+      // Archive build artifacts
+      script {
+        if (fileExists('dist')) {
+          echo "📦 Archiving build artifacts..."
+          if (isUnix()) {
+            sh 'tar -czf build-artifacts.tar.gz dist/'
+            archiveArtifacts artifacts: 'build-artifacts.tar.gz', allowEmptyArchive: false
+          } else {
+            archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: false
+          }
+          echo "✅ Artifacts archived successfully!"
+        } else {
+          echo "⚠️  No build artifacts to archive"
+        }
       }
     }
   }
