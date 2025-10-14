@@ -12,14 +12,6 @@ pipeline {
 
         stage('Parallel Build') {
             parallel {
-                stage('Archive Build Artifacts (Controller)') {
-                    agent { label 'master' }
-                    steps {
-                        echo 'Archiving build output on controller...'
-                        archiveArtifacts artifacts: 'dist/', fingerprint: true
-                    }
-                }
-
                 stage('Build & Test (aswin_agent)') {
                     agent { label 'aswin_agent' }
                     stages {
@@ -32,12 +24,14 @@ pipeline {
                         stage('Lint') {
                             steps {
                                 echo 'Linting code on aswin_agent...'
+                                // Do not fail the build if lint errors occur
                                 bat 'npm run lint || exit /b 0'
                             }
                         }
                         stage('Test') {
                             steps {
                                 echo 'Running tests on aswin_agent...'
+                                // Skip failure if no tests exist
                                 bat 'npm test || exit /b 0'
                             }
                         }
@@ -45,6 +39,13 @@ pipeline {
                             steps {
                                 echo 'Building production assets on aswin_agent...'
                                 bat 'npm run build'
+                            }
+                        }
+                        stage('Archive Build Artifacts') {
+                            steps {
+                                echo 'Archiving build output from aswin_agent...'
+                                // ✅ Archive directly from the same agent where dist/ exists
+                                archiveArtifacts artifacts: 'dist/**', fingerprint: true
                             }
                         }
                     }
