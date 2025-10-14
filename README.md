@@ -3,7 +3,7 @@
 A modern, feature-rich web application for students to create, join, and manage study groups with real-time collaboration features.
 
 ## 🚀 Features are
-
+ j
 ### Core Functionality
 - **User Authentication** - Secure login/signup with Firebase Auth
 - **Study Group Management** - Create, join, and manage study groups
