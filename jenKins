@@ -1,58 +1,58 @@
 pipeline {
     agent none
+
     stages {
         stage('Checkout') {
-            agent { label 'master' } 
+            agent { label 'master' }
             steps {
                 echo 'Cloning repository on controller...'
                 checkout scm
             }
         }
+
         stage('Parallel Build') {
             parallel {
-                controller {
-                    stage('Archive Build Artifacts') {
-                        agent { label 'master' }
-                        steps {
-                            echo 'Archiving build output on controller...'
-                            // change the path according to what was built in aswin_agent
-                            archiveArtifacts artifacts: 'dist/', fingerprint: true
-                        }
+                stage('Archive Build Artifacts (Controller)') {
+                    agent { label 'master' }
+                    steps {
+                        echo 'Archiving build output on controller...'
+                        archiveArtifacts artifacts: 'dist/', fingerprint: true
                     }
                 }
-                aswin_agent {
-                    stage('Install Dependencies') {
-                        agent { label 'aswin_agent' }
-                        steps {
-                            echo 'Installing npm packages on aswin_agent...'
-                            bat 'npm install'
+
+                stage('Build & Test (aswin_agent)') {
+                    agent { label 'aswin_agent' }
+                    stages {
+                        stage('Install Dependencies') {
+                            steps {
+                                echo 'Installing npm packages on aswin_agent...'
+                                bat 'npm install'
+                            }
                         }
-                    }
-                    stage('Lint') {
-                        agent { label 'aswin_agent' }
-                        steps {
-                            echo 'Linting code on aswin_agent...'
-                            bat 'npm run lint || exit /b 0'
+                        stage('Lint') {
+                            steps {
+                                echo 'Linting code on aswin_agent...'
+                                bat 'npm run lint || exit /b 0'
+                            }
                         }
-                    }
-                    stage('Test') {
-                        agent { label 'aswin_agent' }
-                        steps {
-                            echo 'Running tests on aswin_agent...'
-                            bat 'npm test || exit /b 0'
+                        stage('Test') {
+                            steps {
+                                echo 'Running tests on aswin_agent...'
+                                bat 'npm test || exit /b 0'
+                            }
                         }
-                    }
-                    stage('Build') {
-                        agent { label 'aswin_agent' }
-                        steps {
-                            echo 'Building production assets on aswin_agent...'
-                            bat 'npm run build'
+                        stage('Build') {
+                            steps {
+                                echo 'Building production assets on aswin_agent...'
+                                bat 'npm run build'
+                            }
                         }
                     }
                 }
             }
         }
     }
+
     post {
         success {
             echo '✅ CI pipeline completed successfully.'
