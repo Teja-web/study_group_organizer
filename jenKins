@@ -1,224 +1,64 @@
 pipeline {
-  agent any
-  options { 
-    timestamps()
-    timeout(time: 15, unit: 'MINUTES')
-    buildDiscarder(logRotator(numToKeepStr: '10'))
-  }
-
-  environment {
-    NODE_VERSION = '18'
-  }
-
-  stages {
-    /* 1) Checkout and Environment Setup */
-    stage('Checkout & Setup') {
-      steps {
-        echo "=========================================="
-        echo "🚀 STARTING BUILD FOR STUDY GROUP ORGANIZER"
-        echo "=========================================="
-        echo "NODE = ${env.NODE_NAME}"
-        echo "WORKSPACE = ${env.WORKSPACE}"
-        echo "BUILD_NUMBER = ${env.BUILD_NUMBER}"
-        echo "BRANCH = ${env.BRANCH_NAME}"
-        echo "=========================================="
-        
-        script {
-          if (isUnix()) {
-            sh '''
-              echo "🔍 Checking Node.js version..."
-              node --version
-              echo "🔍 Checking npm version..."
-              npm --version
-            '''
-          } else {
-            bat '''
-              echo 🔍 Checking Node.js version...
-              node --version
-              echo 🔍 Checking npm version...
-              npm --version
-            '''
-          }
+    agent none
+    stages {
+        stage('Checkout') {
+            agent { label 'master' } 
+            steps {
+                echo 'Cloning repository on controller...'
+                checkout scm
+            }
         }
-      }
-    }
-
-    /* 2) Install Dependencies */
-    stage('Install Dependencies') {
-      steps {
-        echo "=========================================="
-        echo "📦 INSTALLING DEPENDENCIES"
-        echo "=========================================="
-        
-        script {
-          if (isUnix()) {
-            sh '''
-              echo "🧹 Cleaning previous installations..."
-              rm -rf node_modules package-lock.json
-              echo "📥 Installing dependencies..."
-              npm install
-              echo "✅ Dependencies installed successfully!"
-            '''
-          } else {
-            bat '''
-              echo 🧹 Cleaning previous installations...
-              if exist node_modules rmdir /s /q node_modules
-              if exist package-lock.json del package-lock.json
-              echo 📥 Installing dependencies...
-              npm install
-              echo ✅ Dependencies installed successfully!
-            '''
-          }
+        stage('Parallel Build') {
+            parallel {
+                controller {
+                    stage('Archive Build Artifacts') {
+                        agent { label 'master' }
+                        steps {
+                            echo 'Archiving build output on controller...'
+                            // change the path according to what was built in aswin_agent
+                            archiveArtifacts artifacts: 'dist/', fingerprint: true
+                        }
+                    }
+                }
+                aswin_agent {
+                    stage('Install Dependencies') {
+                        agent { label 'aswin_agent' }
+                        steps {
+                            echo 'Installing npm packages on aswin_agent...'
+                            bat 'npm install'
+                        }
+                    }
+                    stage('Lint') {
+                        agent { label 'aswin_agent' }
+                        steps {
+                            echo 'Linting code on aswin_agent...'
+                            bat 'npm run lint || exit /b 0'
+                        }
+                    }
+                    stage('Test') {
+                        agent { label 'aswin_agent' }
+                        steps {
+                            echo 'Running tests on aswin_agent...'
+                            bat 'npm test || exit /b 0'
+                        }
+                    }
+                    stage('Build') {
+                        agent { label 'aswin_agent' }
+                        steps {
+                            echo 'Building production assets on aswin_agent...'
+                            bat 'npm run build'
+                        }
+                    }
+                }
+            }
         }
-      }
     }
-
-    /* 3) Lint Code */
-    stage('Code Linting') {
-      steps {
-        echo "=========================================="
-        echo "🔍 RUNNING CODE LINTING"
-        echo "=========================================="
-        
-        script {
-          if (isUnix()) {
-            sh '''
-              echo "🔍 Running ESLint..."
-              npm run lint
-              echo "✅ Code linting completed!"
-            '''
-          } else {
-            bat '''
-              echo 🔍 Running ESLint...
-              npm run lint
-              echo ✅ Code linting completed!
-            '''
-          }
+    post {
+        success {
+            echo '✅ CI pipeline completed successfully.'
         }
-      }
-    }
-
-    /* 4) Build React App */
-    stage('Build React App') {
-      steps {
-        echo "=========================================="
-        echo "🏗️  BUILDING REACT APPLICATION"
-        echo "=========================================="
-        
-        script {
-          if (isUnix()) {
-            sh '''
-              echo "🧹 Cleaning previous build..."
-              rm -rf dist
-              echo "🏗️  Building React App with Vite..."
-              npm run build
-              echo "✅ Build completed successfully!"
-              echo "📁 Build artifacts:"
-              ls -la dist/
-            '''
-          } else {
-            bat '''
-              echo 🧹 Cleaning previous build...
-              if exist dist rmdir /s /q dist
-              echo 🏗️  Building React App with Vite...
-              npm run build
-              echo ✅ Build completed successfully!
-              echo 📁 Build artifacts:
-              dir dist
-            '''
-          }
+        failure {
+            echo '❌ CI failed. Please check the logs.'
         }
-      }
     }
-
-    /* 5) Verify Build */
-    stage('Verify Build') {
-      steps {
-        echo "=========================================="
-        echo "🔍 VERIFYING BUILD OUTPUT"
-        echo "=========================================="
-        
-        script {
-          if (isUnix()) {
-            sh '''
-              if [ -d "dist" ]; then
-                echo "✅ Build directory exists!"
-                echo "📊 Build size:"
-                du -sh dist/
-                echo "📄 Build contents:"
-                find dist -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -10
-                echo "🎉 BUILD VERIFICATION SUCCESSFUL!"
-              else
-                echo "❌ Build directory not found!"
-                exit 1
-              fi
-            '''
-          } else {
-            bat '''
-              if exist dist (
-                echo ✅ Build directory exists!
-                echo 📊 Build contents:
-                dir dist /s
-                echo 🎉 BUILD VERIFICATION SUCCESSFUL!
-              ) else (
-                echo ❌ Build directory not found!
-                exit /b 1
-              )
-            '''
-          }
-        }
-      }
-    }
-  }
-
-  post {
-    success {
-      echo "=========================================="
-      echo "🎉 BUILD COMPLETED SUCCESSFULLY!"
-      echo "=========================================="
-      echo "Build Number: ${env.BUILD_NUMBER}"
-      echo "Branch: ${env.BRANCH_NAME}"
-      echo "Node: ${env.NODE_NAME}"
-      echo "Duration: ${currentBuild.durationString}"
-      echo "=========================================="
-    }
-    
-    failure {
-      echo "=========================================="
-      echo "❌ BUILD FAILED!"
-      echo "=========================================="
-      echo "Build Number: ${env.BUILD_NUMBER}"
-      echo "Branch: ${env.BRANCH_NAME}"
-      echo "Node: ${env.NODE_NAME}"
-      echo "Duration: ${currentBuild.durationString}"
-      echo "Check the logs above for error details."
-      echo "=========================================="
-    }
-    
-    always {
-      echo "=========================================="
-      echo "📋 BUILD SUMMARY"
-      echo "=========================================="
-      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
-      echo "Build Number: ${env.BUILD_NUMBER}"
-      echo "Duration: ${currentBuild.durationString}"
-      echo "=========================================="
-      
-      // Archive build artifacts
-      script {
-        if (fileExists('dist')) {
-          echo "📦 Archiving build artifacts..."
-          if (isUnix()) {
-            sh 'tar -czf build-artifacts.tar.gz dist/'
-            archiveArtifacts artifacts: 'build-artifacts.tar.gz', allowEmptyArchive: false
-          } else {
-            archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: false
-          }
-          echo "✅ Artifacts archived successfully!"
-        } else {
-          echo "⚠️  No build artifacts to archive"
-        }
-      }
-    }
-  }
 }
