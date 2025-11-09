@@ -46,8 +46,6 @@ pipeline {
         script {
           echo "Building Docker image ${FULL_IMAGE}"
           withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-            // NOTE: Windows cmd - piping secrets can be tricky. If you run into issues,
-            // consider switching to a PowerShell wrapper or docker credential helpers.
             bat """
               echo %DOCKER_PASS% | docker login -u "%DOCKER_USER%" --password-stdin %DOCKER_REGISTRY%
               docker build -t %DOCKER_REPO%:%IMAGE_TAG% .
@@ -65,7 +63,6 @@ pipeline {
         script {
           echo "Deploying ${FULL_IMAGE} to Kubernetes..."
           withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
-            // use a Windows-friendly bat script; read ERRORLEVEL into DEPLOY_ERR using %ERRORLEVEL%
             bat '''
               setlocal enabledelayedexpansion
               set KUBECONFIG=%KUBECONFIG_FILE%
@@ -78,9 +75,10 @@ pipeline {
               kubectl -n study-group-organizer get deployment study-group-organizer >nul 2>nul
               rem capture last command exit code correctly
               set DEPLOY_ERR=%ERRORLEVEL%
-              rem now use delayed expansion to test DEPLOY_ERR inside parentheses
-              if !DEPLOY_ERR! NEQ 0 (
-                echo Applying manifests from k8s/ (first-time apply)...
+              rem use a safer comparison to avoid delayed-expansion parsing issues
+              IF NOT "%DEPLOY_ERR%"=="0" (
+                rem avoid parentheses inside echo to prevent parse errors
+                echo Applying manifests from k8s/ - first-time apply...
                 kubectl apply -n study-group-organizer -f k8s/
                 IF ERRORLEVEL 1 kubectl apply -n study-group-organizer -f deployment.yml
                 timeout /t 3 >nul
