@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: study-group-organizer-config
+  namespace: study-group-organizer
+  labels:
+    app: study-group-organizer
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+

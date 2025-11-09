@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: study-group-organizer
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+commonLabels:
+  app: study-group-organizer
+  version: v1
+
+images:
+  - name: jaginisaiteja/project
+    newName: jaginisaiteja/project
+    newTag: latest
+

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: study-group-organizer
+  labels:
+    name: study-group-organizer
+    environment: production
+
