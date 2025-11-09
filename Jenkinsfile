@@ -3,24 +3,18 @@ pipeline {
 
   // === Configure these in the job or change defaults here ===
   environment {
-    // Image info (default: use image already on Docker Hub)
-    DOCKER_REGISTRY = "docker.io"                           // Docker Hub
-    DOCKER_REPO     = "jaginisaiteja/project"               // your repo/image path on Docker Hub
-    IMAGE_TAG       = "${env.IMAGE_TAG ?: 'latest'}"        // default 'latest', can be overridden by job param
+    DOCKER_REGISTRY = "docker.io"
+    DOCKER_REPO     = "jaginisaiteja/project"
+    IMAGE_TAG       = "${env.IMAGE_TAG ?: 'latest'}"
     FULL_IMAGE      = "${DOCKER_REGISTRY}/${DOCKER_REPO}:${IMAGE_TAG}"
-
-    // Jenkins credential IDs (create these in Jenkins Credentials)
-    DOCKER_CREDENTIALS_ID     = "dockerhub"                 // matches Jenkins credential ID for Docker Hub
-    KUBECONFIG_CREDENTIAL_ID  = "k8s-dev-kubeconfig"        // matches Jenkins credential ID for kubeconfig
-
-    // Toggle: if true, Jenkins will build & push image; else it will skip build/push and deploy existing image
-    DO_BUILD_AND_PUSH = "${DO_BUILD_AND_PUSH ?: 'false'}"   // set to 'true' to build/push
+    DOCKER_CREDENTIALS_ID     = "dockerhub"
+    KUBECONFIG_CREDENTIAL_ID  = "k8s-dev-kubeconfig"
+    DO_BUILD_AND_PUSH = "${DO_BUILD_AND_PUSH ?: 'false'}"
   }
 
   options {
     buildDiscarder(logRotator(numToKeepStr: '20'))
     timestamps()
-    ansiColor('xterm')
     timeout(time: 30, unit: 'MINUTES')
   }
 
@@ -30,13 +24,9 @@ pipeline {
   }
 
   stages {
-
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
-
     stage('Install & Test') {
       steps {
         echo "Installing dependencies and running tests..."
@@ -46,7 +36,6 @@ pipeline {
         junit testResults: '**/test-results/*.xml', allowEmptyResults: true
       }
     }
-
     stage('Build (optional)') {
       when {
         expression { return params.DO_BUILD_AND_PUSH.toString() == 'true' || env.DO_BUILD_AND_PUSH == 'true' }
@@ -66,7 +55,6 @@ pipeline {
         }
       }
     }
-
     stage('Deploy to Kubernetes') {
       steps {
         script {
@@ -87,7 +75,6 @@ pipeline {
         }
       }
     }
-
     stage('Smoke Tests') {
       steps {
         script {
@@ -95,7 +82,7 @@ pipeline {
           withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
             sh '''
               export KUBECONFIG=${KUBECONFIG_FILE}
-              kubectl -n study-group-organizer port-forward svc/myapp-svc 5000:80 >/tmp/portforward.log 2>&1 & 
+              kubectl -n study-group-organizer port-forward svc/myapp-svc 5000:80 >/tmp/portforward.log 2>&1 &
               PF_PID=$!
               sleep 2
               set +e
@@ -117,14 +104,8 @@ pipeline {
   }
 
   post {
-    success {
-      echo "Pipeline succeeded. Deployed ${FULL_IMAGE}"
-    }
-    failure {
-      echo "Pipeline failed."
-    }
-    always {
-      cleanWs()
-    }
+    success { echo "Pipeline succeeded. Deployed ${FULL_IMAGE}" }
+    failure { echo "Pipeline failed." }
+    always { cleanWs() }
   }
 }
