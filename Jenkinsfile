@@ -100,36 +100,36 @@ pipeline {
           withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
             // Use PowerShell to run kubectl port-forward in background, do HTTP check, then kill it.
             powershell(returnStatus: false, script: """
-              $kubeconfig = "${env.KUBECONFIG_FILE}"
-              $env:KUBECONFIG = $kubeconfig
+              \$kubeconfig = "${env.KUBECONFIG_FILE}"
+              \$env:KUBECONFIG = \$kubeconfig
 
               Write-Host "Starting kubectl port-forward in background..."
               # Start kubectl in background and redirect output
-              $pf = Start-Process -FilePath 'kubectl' -ArgumentList '-n','study-group-organizer','port-forward','svc/myapp-svc','5000:80' -NoNewWindow -RedirectStandardOutput 'portforward.log' -RedirectStandardError 'portforward.log' -PassThru
+              \$pf = Start-Process -FilePath 'kubectl' -ArgumentList '-n','study-group-organizer','port-forward','svc/myapp-svc','5000:80' -NoNewWindow -RedirectStandardOutput 'portforward.log' -RedirectStandardError 'portforward.log' -PassThru
 
               # Wait a moment for port-forward to start
               Start-Sleep -Seconds 3
 
               try {
                 Write-Host "Checking service at http://127.0.0.1:5000/ ..."
-                $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/' -UseBasicParsing -TimeoutSec 10
-                if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 300) {
-                  Write-Host 'Smoke test succeeded. HTTP status:' $resp.StatusCode
+                \$resp = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/' -UseBasicParsing -TimeoutSec 10
+                if (\$resp.StatusCode -ge 200 -and \$resp.StatusCode -lt 300) {
+                  Write-Host 'Smoke test succeeded. HTTP status:' \$resp.StatusCode
                 } else {
-                  Write-Error \"Smoke test failed: HTTP status $($resp.StatusCode)\"
+                  Write-Error \"Smoke test failed: HTTP status \$($\\resp.StatusCode)\"
                   Write-Host 'Dumping recent pod logs...'
                   kubectl -n study-group-organizer logs -l app=study-group-organizer --tail=200
                   exit 1
                 }
               } catch {
-                Write-Error \"Smoke test request failed: $($_.Exception.Message)\"
+                Write-Error \"Smoke test request failed: \$($_.Exception.Message)\"
                 Write-Host 'Dumping recent pod logs...'
                 kubectl -n study-group-organizer logs -l app=study-group-organizer --tail=200
                 exit 1
               } finally {
-                if ($pf -and -not $pf.HasExited) {
-                  Write-Host 'Stopping port-forward process (id=' + $pf.Id + ')'
-                  try { $pf.Kill() } catch { Write-Warning 'Failed to kill process: ' + $_.Exception.Message }
+                if (\$pf -and -not \$pf.HasExited) {
+                  Write-Host 'Stopping port-forward process (id=' + \$pf.Id + ')'
+                  try { \$pf.Kill() } catch { Write-Warning 'Failed to kill process: ' + \$_.Exception.Message }
                 }
                 Start-Sleep -Milliseconds 500
               }
