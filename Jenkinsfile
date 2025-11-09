@@ -96,27 +96,50 @@ pipeline {
     stage('Smoke Tests') {
       steps {
         script {
-          echo "Running smoke test against service..."
+          echo "Running smoke test against service (PowerShell)..."
           withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
-            bat """
-              set KUBECONFIG=%KUBECONFIG_FILE%
-              rem use start /b to background the port-forward on Windows
-              start \"\" /b kubectl -n study-group-organizer port-forward svc/myapp-svc 5000:80 > portforward.log 2>&1
-              timeout /t 2 >nul
-              curl -f http://127.0.0.1:5000/ || set RC=%ERRORLEVEL%
-              taskkill /IM \"kubectl.exe\" /F >nul 2>&1
-              IF NOT \"%RC%\"==\"0\" (
-                echo Smoke test failed (curl return %RC%). Printing recent pod logs:
+            // Use PowerShell to run kubectl port-forward in background, do HTTP check, then kill it.
+            powershell(returnStatus: false, script: """
+              $kubeconfig = "${env.KUBECONFIG_FILE}"
+              $env:KUBECONFIG = $kubeconfig
+
+              Write-Host "Starting kubectl port-forward in background..."
+              # Start kubectl in background and redirect output
+              $pf = Start-Process -FilePath 'kubectl' -ArgumentList '-n','study-group-organizer','port-forward','svc/myapp-svc','5000:80' -NoNewWindow -RedirectStandardOutput 'portforward.log' -RedirectStandardError 'portforward.log' -PassThru
+
+              # Wait a moment for port-forward to start
+              Start-Sleep -Seconds 3
+
+              try {
+                Write-Host "Checking service at http://127.0.0.1:5000/ ..."
+                $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/' -UseBasicParsing -TimeoutSec 10
+                if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 300) {
+                  Write-Host 'Smoke test succeeded. HTTP status:' $resp.StatusCode
+                } else {
+                  Write-Error \"Smoke test failed: HTTP status $($resp.StatusCode)\"
+                  Write-Host 'Dumping recent pod logs...'
+                  kubectl -n study-group-organizer logs -l app=study-group-organizer --tail=200
+                  exit 1
+                }
+              } catch {
+                Write-Error \"Smoke test request failed: $($_.Exception.Message)\"
+                Write-Host 'Dumping recent pod logs...'
                 kubectl -n study-group-organizer logs -l app=study-group-organizer --tail=200
-                exit /b 1
-              )
-              echo Smoke test succeeded.
-            """
+                exit 1
+              } finally {
+                if ($pf -and -not $pf.HasExited) {
+                  Write-Host 'Stopping port-forward process (id=' + $pf.Id + ')'
+                  try { $pf.Kill() } catch { Write-Warning 'Failed to kill process: ' + $_.Exception.Message }
+                }
+                Start-Sleep -Milliseconds 500
+              }
+            """)
           }
         }
       }
     }
-  }
+
+  } // stages
 
   post {
     success { echo "Pipeline succeeded. Deployed ${FULL_IMAGE}" }
