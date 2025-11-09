@@ -63,15 +63,12 @@ pipeline {
               setlocal enabledelayedexpansion
               set KUBECONFIG=%KUBECONFIG_FILE%
 
-              REM Ensure namespace exists
               kubectl get namespace study-group-organizer >nul 2>nul
               IF ERRORLEVEL 1 kubectl create namespace study-group-organizer
 
-              REM Check if deployment exists
               kubectl -n study-group-organizer get deployment study-group-organizer >nul 2>nul
               set DEPLOY_ERR=!ERRORLEVEL!
-              REM Use delayed expansion to safely access variable inside IF block
-              if "!DEPLOY_ERR!" NEQ "0" (
+              if !DEPLOY_ERR! NEQ 0 (
                 echo Applying manifests from k8s/ (first-time apply)...
                 kubectl apply -n study-group-organizer -f k8s/
                 IF ERRORLEVEL 1 kubectl apply -n study-group-organizer -f deployment.yml
@@ -94,7 +91,6 @@ pipeline {
             bat """
               set KUBECONFIG=%KUBECONFIG_FILE%
               kubectl -n study-group-organizer port-forward svc/myapp-svc 5000:80 > portforward.log 2>&1 &
-              REM Windows cannot capture PID as easily, so this step may require PowerShell for production.
               timeout /t 2 >nul
               curl -f http://127.0.0.1:5000/ || set RC=%ERRORLEVEL%
               taskkill /IM "kubectl.exe" /F >nul 2>&1
