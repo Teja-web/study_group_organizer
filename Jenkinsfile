@@ -55,30 +55,35 @@ pipeline {
       }
     }
     stage('Deploy to Kubernetes') {
-      steps {
-        script {
-          echo "Deploying ${FULL_IMAGE} to Kubernetes..."
-          withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
-            bat """
-              set KUBECONFIG=%KUBECONFIG_FILE%
-              kubectl get namespace study-group-organizer
-              IF ERRORLEVEL 1 kubectl create namespace study-group-organizer
+        steps {
+            script {
+            echo "Deploying ${FULL_IMAGE} to Kubernetes..."
+            withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
+                bat '''
+                set KUBECONFIG=%KUBECONFIG_FILE%
+                
+                REM Ensure namespace exists
+                kubectl get namespace study-group-organizer >nul 2>nul
+                IF ERRORLEVEL 1 kubectl create namespace study-group-organizer
 
-              kubectl -n study-group-organizer get deployment study-group-organizer
-              IF ERRORLEVEL 1 (
-                echo Applying manifests from k8s/ (first-time apply)...
-                kubectl apply -n study-group-organizer -f k8s/
-                IF ERRORLEVEL 1 kubectl apply -n study-group-organizer -f deployment.yml
-                timeout /t 3 >nul
-              )
+                REM Check if deployment exists
+                kubectl -n study-group-organizer get deployment study-group-organizer >nul 2>nul
+                set DEPLOY_ERR=%ERRORLEVEL%
+                IF %DEPLOY_ERR% NEQ 0 (
+                    echo Applying manifests from k8s/ (first-time apply)...
+                    kubectl apply -n study-group-organizer -f k8s/
+                    IF ERRORLEVEL 1 kubectl apply -n study-group-organizer -f deployment.yml
+                    timeout /t 3 >nul
+                )
 
-              kubectl -n study-group-organizer set image deployment/study-group-organizer study-group-organizer=%FULL_IMAGE% --record
-              kubectl -n study-group-organizer rollout status deployment/study-group-organizer --timeout=180s
-            """
+                kubectl -n study-group-organizer set image deployment/study-group-organizer study-group-organizer=%FULL_IMAGE% --record
+                kubectl -n study-group-organizer rollout status deployment/study-group-organizer --timeout=180s
+                '''
+            }
           }
-        }
-      }
+       }
     }
+
     stage('Smoke Tests') {
       steps {
         script {
