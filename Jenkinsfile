@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     DOCKER_REGISTRY = "docker.io"
-    DOCKER_REPO     = "jaginisaiteja/project"
+    DOCKER_REPO     = "jaginisaiteja/project1"
     IMAGE_TAG       = "${env.IMAGE_TAG ?: 'latest'}"
     FULL_IMAGE      = "${DOCKER_REGISTRY}/${DOCKER_REPO}:${IMAGE_TAG}"
     DOCKER_CREDENTIALS_ID     = "dockerhub"
