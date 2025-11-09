@@ -96,19 +96,16 @@ pipeline {
     stage('Smoke Tests') {
       steps {
         script {
-          echo "Running smoke test against service (PowerShell safe injection)..."
+          echo "Running smoke test against service (PowerShell, file-based)..."
           withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
-            // Build a PowerShell script using a non-interpolated (''') Groovy string,
-            // then concatenate the single Groovy interpolation for the kubeconfig path.
+            // define PS script content using triple-single-quotes (no Groovy $ interpolation)
             def psScript = '''
-# PowerShell smoke test script (no Groovy interpolation inside)
 param([string]$KUBECONFIG_FILE)
 
 $env:KUBECONFIG = $KUBECONFIG_FILE
 Write-Host "Using kubeconfig: $KUBECONFIG_FILE"
 
 Write-Host "Starting kubectl port-forward in background..."
-# Start kubectl in background and redirect output
 $pf = Start-Process -FilePath 'kubectl' -ArgumentList '-n','study-group-organizer','port-forward','svc/myapp-svc','5000:80' -NoNewWindow -RedirectStandardOutput 'portforward.log' -RedirectStandardError 'portforward.log' -PassThru
 
 Start-Sleep -Seconds 3
@@ -117,7 +114,7 @@ try {
   Write-Host "Checking service at http://127.0.0.1:5000/ ..."
   $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/' -UseBasicParsing -TimeoutSec 10
   if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 300) {
-    Write-Host 'Smoke test succeeded. HTTP status:' $resp.StatusCode
+    Write-Host "Smoke test succeeded. HTTP status: $($resp.StatusCode)"
   } else {
     Write-Error "Smoke test failed: HTTP status $($resp.StatusCode)"
     Write-Host 'Dumping recent pod logs...'
@@ -131,24 +128,16 @@ try {
   exit 1
 } finally {
   if ($pf -and -not $pf.HasExited) {
-    Write-Host 'Stopping port-forward process (id=' + $pf.Id + ')'
-    try { $pf.Kill() } catch { Write-Warning 'Failed to kill process: ' + $_.Exception.Message }
+    Write-Host ('Stopping port-forward process (id=' + $pf.Id + ')')
+    try { $pf.Kill() } catch { Write-Warning ('Failed to kill process: ' + $_.Exception.Message) }
   }
   Start-Sleep -Milliseconds 500
 }
 '''
-            // concatenate a single Groovy interpolation (safe) to pass the kubeconfig path as the param
-            def fullScript = psScript + "\n" + " & { param([string] \$KUBECONFIG_FILE) `n & } " // placeholder to ensure valid string concat
-            // We will pass the kubeconfig as an argument to powershell -Command, so build the command:
-            def cmd = psScript + "\n" // final content to pass to powershell
-            // Execute the powershell script by passing the kubeconfig via -Command and param block.
-            // Use double quotes in the command to inject the file path safely.
-            powershell(returnStatus: false, script: psScript + "\n" + " & { param([string] \$KUBECONFIG_FILE) `n & } " ) // harmless, we run below with arguments
-
-            // Instead of sending the whole script via Groovy interpolation (which may still confuse),
-            // write it to disk and then call it passing the kubeconfig as a parameter.
+            // write PS file and run it passing the kubeconfig path safely
             writeFile file: 'smoke_test.ps1', text: psScript
-            powershell(returnStatus: false, script: "& '.\\\\smoke_test.ps1' -KUBECONFIG_FILE \"${env.KUBECONFIG_FILE}\"")
+            // run the PS script and pass the kubeconfig path as parameter
+            powershell(returnStatus: false, script: "& '.\\smoke_test.ps1' -KUBECONFIG_FILE \"${env.KUBECONFIG_FILE}\"")
           }
         }
       }
